@@ -7,36 +7,54 @@ import (
 )
 
 func (s *Service) CreateRun(input CreateRunInput) (domain.FermentationRun, error) {
-	now := s.clock.Now()
-	code := domain.NormalizeRunCode(input.Code)
-	if code == "" {
-		generated, err := generatedRunCode()
-		if err != nil {
-			return domain.FermentationRun{}, domain.NewError(domain.CodeStorage, err.Error())
-		}
-		code = generated
-	}
-	run := domain.FermentationRun{
-		Code:           code,
-		FormulaID:      input.FormulaID,
-		PlannedVolumeL: input.PlannedVolumeL,
-		Notes:          input.Notes,
-		State:          domain.RunPlanned,
-		Observations:   []domain.GravityObservation{},
-		Version:        1,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-	}
-	if err := run.Validate(); err != nil {
+	var created domain.FermentationRun
+	if err := s.store.Execute(s.createRun(input, &created)); err != nil {
 		return domain.FermentationRun{}, err
 	}
-	id, err := generateEntityID("run")
-	if err != nil {
-		return domain.FermentationRun{}, domain.NewError(domain.CodeStorage, err.Error())
-	}
-	run.ID = id
+	return created, nil
+}
 
-	err = s.store.Execute(func(snapshot *domain.Snapshot) error {
+func (s *Service) PreflightCreateRun(
+	input CreateRunInput,
+) (PreflightReport, domain.FermentationRun) {
+	var created domain.FermentationRun
+	report := s.preflight(s.createRun(input, &created), noCurrentVersion)
+	return report, created
+}
+
+func (s *Service) createRun(
+	input CreateRunInput,
+	created *domain.FermentationRun,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
+		now := s.clock.Now()
+		code := domain.NormalizeRunCode(input.Code)
+		if code == "" {
+			generated, err := generatedRunCode()
+			if err != nil {
+				return domain.NewError(domain.CodeStorage, err.Error())
+			}
+			code = generated
+		}
+		run := domain.FermentationRun{
+			Code:           code,
+			FormulaID:      input.FormulaID,
+			PlannedVolumeL: input.PlannedVolumeL,
+			Notes:          input.Notes,
+			State:          domain.RunPlanned,
+			Observations:   []domain.GravityObservation{},
+			Version:        1,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}
+		if err := run.Validate(); err != nil {
+			return err
+		}
+		id, err := generateEntityID("run")
+		if err != nil {
+			return domain.NewError(domain.CodeStorage, err.Error())
+		}
+		run.ID = id
 		formula, ok := snapshot.Formulas[run.FormulaID]
 		if !ok {
 			return domain.NewError(domain.CodeFormulaNotFound, "formula was not found")
@@ -51,12 +69,9 @@ func (s *Service) CreateRun(input CreateRunInput) (domain.FermentationRun, error
 		}
 		snapshot.Runs[run.ID] = run.Clone()
 		snapshot.RunIndex[run.Code] = run.ID
+		*created = run.Clone()
 		return nil
-	})
-	if err != nil {
-		return domain.FermentationRun{}, err
 	}
-	return run.Clone(), nil
 }
 
 func (s *Service) ReserveRun(
@@ -65,7 +80,31 @@ func (s *Service) ReserveRun(
 ) (domain.FermentationRun, domain.Vessel, error) {
 	var updatedRun domain.FermentationRun
 	var updatedVessel domain.Vessel
-	err := s.store.Execute(func(snapshot *domain.Snapshot) error {
+	err := s.store.Execute(s.reserveRun(id, input, &updatedRun, &updatedVessel))
+	if err != nil {
+		return domain.FermentationRun{}, domain.Vessel{}, err
+	}
+	return updatedRun, updatedVessel, nil
+}
+
+func (s *Service) PreflightReserveRun(
+	id string,
+	input ReserveRunInput,
+) (PreflightReport, domain.FermentationRun, domain.Vessel) {
+	var updatedRun domain.FermentationRun
+	var updatedVessel domain.Vessel
+	report := s.preflight(s.reserveRun(id, input, &updatedRun, &updatedVessel),
+		runVersionOf(id))
+	return report, updatedRun, updatedVessel
+}
+
+func (s *Service) reserveRun(
+	id string,
+	input ReserveRunInput,
+	updatedRun *domain.FermentationRun,
+	updatedVessel *domain.Vessel,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
 		run, ok := snapshot.Runs[id]
 		if !ok {
 			return domain.NewError(domain.CodeRunNotFound, "run was not found")
@@ -89,14 +128,10 @@ func (s *Service) ReserveRun(
 		}
 		snapshot.Runs[id] = run.Clone()
 		snapshot.Vessels[vessel.ID] = vessel
-		updatedRun = run.Clone()
-		updatedVessel = vessel
+		*updatedRun = run.Clone()
+		*updatedVessel = vessel
 		return nil
-	})
-	if err != nil {
-		return domain.FermentationRun{}, domain.Vessel{}, err
 	}
-	return updatedRun, updatedVessel, nil
 }
 
 func (s *Service) StartRun(
@@ -105,7 +140,31 @@ func (s *Service) StartRun(
 ) (domain.FermentationRun, domain.Vessel, error) {
 	var updatedRun domain.FermentationRun
 	var updatedVessel domain.Vessel
-	err := s.store.Execute(func(snapshot *domain.Snapshot) error {
+	err := s.store.Execute(s.startRun(id, input, &updatedRun, &updatedVessel))
+	if err != nil {
+		return domain.FermentationRun{}, domain.Vessel{}, err
+	}
+	return updatedRun, updatedVessel, nil
+}
+
+func (s *Service) PreflightStartRun(
+	id string,
+	input VersionInput,
+) (PreflightReport, domain.FermentationRun, domain.Vessel) {
+	var updatedRun domain.FermentationRun
+	var updatedVessel domain.Vessel
+	report := s.preflight(s.startRun(id, input, &updatedRun, &updatedVessel),
+		runVersionOf(id))
+	return report, updatedRun, updatedVessel
+}
+
+func (s *Service) startRun(
+	id string,
+	input VersionInput,
+	updatedRun *domain.FermentationRun,
+	updatedVessel *domain.Vessel,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
 		run, ok := snapshot.Runs[id]
 		if !ok {
 			return domain.NewError(domain.CodeRunNotFound, "run was not found")
@@ -128,14 +187,10 @@ func (s *Service) StartRun(
 		}
 		snapshot.Runs[id] = run.Clone()
 		snapshot.Vessels[vessel.ID] = vessel
-		updatedRun = run.Clone()
-		updatedVessel = vessel
+		*updatedRun = run.Clone()
+		*updatedVessel = vessel
 		return nil
-	})
-	if err != nil {
-		return domain.FermentationRun{}, domain.Vessel{}, err
 	}
-	return updatedRun, updatedVessel, nil
 }
 
 func (s *Service) AbortRun(
@@ -144,7 +199,31 @@ func (s *Service) AbortRun(
 ) (domain.FermentationRun, domain.Vessel, error) {
 	var updatedRun domain.FermentationRun
 	var updatedVessel domain.Vessel
-	err := s.store.Execute(func(snapshot *domain.Snapshot) error {
+	err := s.store.Execute(s.abortRun(id, input, &updatedRun, &updatedVessel))
+	if err != nil {
+		return domain.FermentationRun{}, domain.Vessel{}, err
+	}
+	return updatedRun, updatedVessel, nil
+}
+
+func (s *Service) PreflightAbortRun(
+	id string,
+	input VersionInput,
+) (PreflightReport, domain.FermentationRun, domain.Vessel) {
+	var updatedRun domain.FermentationRun
+	var updatedVessel domain.Vessel
+	report := s.preflight(s.abortRun(id, input, &updatedRun, &updatedVessel),
+		runVersionOf(id))
+	return report, updatedRun, updatedVessel
+}
+
+func (s *Service) abortRun(
+	id string,
+	input VersionInput,
+	updatedRun *domain.FermentationRun,
+	updatedVessel *domain.Vessel,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
 		run, ok := snapshot.Runs[id]
 		if !ok {
 			return domain.NewError(domain.CodeRunNotFound, "run was not found")
@@ -169,16 +248,12 @@ func (s *Service) AbortRun(
 				return err
 			}
 			snapshot.Vessels[vessel.ID] = vessel
-			updatedVessel = vessel
+			*updatedVessel = vessel
 		}
 		snapshot.Runs[id] = run.Clone()
-		updatedRun = run.Clone()
+		*updatedRun = run.Clone()
 		return nil
-	})
-	if err != nil {
-		return domain.FermentationRun{}, domain.Vessel{}, err
 	}
-	return updatedRun, updatedVessel, nil
 }
 
 func (s *Service) GetRun(id string) (domain.FermentationRun, error) {

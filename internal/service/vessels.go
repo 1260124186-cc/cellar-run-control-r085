@@ -7,37 +7,52 @@ import (
 )
 
 func (s *Service) CreateVessel(input CreateVesselInput) (domain.Vessel, error) {
-	now := s.clock.Now()
-	vessel := domain.Vessel{
-		Code:      domain.NormalizeVesselCode(input.Code),
-		CapacityL: input.CapacityL,
-		State:     domain.VesselAvailable,
-		Version:   1,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	if err := vessel.Validate(); err != nil {
+	var created domain.Vessel
+	if err := s.store.Execute(s.createVessel(input, &created)); err != nil {
 		return domain.Vessel{}, err
 	}
-	id, err := generateEntityID("vessel")
-	if err != nil {
-		return domain.Vessel{}, domain.NewError(domain.CodeStorage, err.Error())
-	}
-	vessel.ID = id
+	return created, nil
+}
 
-	err = s.store.Execute(func(snapshot *domain.Snapshot) error {
+func (s *Service) PreflightCreateVessel(
+	input CreateVesselInput,
+) (PreflightReport, domain.Vessel) {
+	var created domain.Vessel
+	report := s.preflight(s.createVessel(input, &created), noCurrentVersion)
+	return report, created
+}
+
+func (s *Service) createVessel(
+	input CreateVesselInput,
+	created *domain.Vessel,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
+		now := s.clock.Now()
+		vessel := domain.Vessel{
+			Code:      domain.NormalizeVesselCode(input.Code),
+			CapacityL: input.CapacityL,
+			State:     domain.VesselAvailable,
+			Version:   1,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := vessel.Validate(); err != nil {
+			return err
+		}
+		id, err := generateEntityID("vessel")
+		if err != nil {
+			return domain.NewError(domain.CodeStorage, err.Error())
+		}
+		vessel.ID = id
 		if _, exists := snapshot.VesselIndex[vessel.Code]; exists {
 			return domain.NewError(domain.CodeVesselConflict,
 				"a vessel with the same code already exists")
 		}
 		snapshot.Vessels[vessel.ID] = vessel
 		snapshot.VesselIndex[vessel.Code] = vessel.ID
+		*created = vessel
 		return nil
-	})
-	if err != nil {
-		return domain.Vessel{}, err
 	}
-	return vessel, nil
 }
 
 func (s *Service) GetVessel(id string) (domain.Vessel, error) {
@@ -82,7 +97,27 @@ func (s *Service) FinishCleaning(
 	input FinishCleaningInput,
 ) (domain.Vessel, error) {
 	var updated domain.Vessel
-	err := s.store.Execute(func(snapshot *domain.Snapshot) error {
+	if err := s.store.Execute(s.finishCleaning(id, input, &updated)); err != nil {
+		return domain.Vessel{}, err
+	}
+	return updated, nil
+}
+
+func (s *Service) PreflightFinishCleaning(
+	id string,
+	input FinishCleaningInput,
+) (PreflightReport, domain.Vessel) {
+	var updated domain.Vessel
+	report := s.preflight(s.finishCleaning(id, input, &updated), vesselVersionOf(id))
+	return report, updated
+}
+
+func (s *Service) finishCleaning(
+	id string,
+	input FinishCleaningInput,
+	updated *domain.Vessel,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
 		vessel, ok := snapshot.Vessels[id]
 		if !ok {
 			return domain.NewError(domain.CodeVesselNotFound, "vessel was not found")
@@ -107,18 +142,34 @@ func (s *Service) FinishCleaning(
 			return err
 		}
 		snapshot.Vessels[id] = vessel
-		updated = vessel
+		*updated = vessel
 		return nil
-	})
-	if err != nil {
+	}
+}
+
+func (s *Service) RetireVessel(id string, input VersionInput) (domain.Vessel, error) {
+	var updated domain.Vessel
+	if err := s.store.Execute(s.retireVessel(id, input, &updated)); err != nil {
 		return domain.Vessel{}, err
 	}
 	return updated, nil
 }
 
-func (s *Service) RetireVessel(id string, input VersionInput) (domain.Vessel, error) {
+func (s *Service) PreflightRetireVessel(
+	id string,
+	input VersionInput,
+) (PreflightReport, domain.Vessel) {
 	var updated domain.Vessel
-	err := s.store.Execute(func(snapshot *domain.Snapshot) error {
+	report := s.preflight(s.retireVessel(id, input, &updated), vesselVersionOf(id))
+	return report, updated
+}
+
+func (s *Service) retireVessel(
+	id string,
+	input VersionInput,
+	updated *domain.Vessel,
+) func(*domain.Snapshot) error {
+	return func(snapshot *domain.Snapshot) error {
 		vessel, ok := snapshot.Vessels[id]
 		if !ok {
 			return domain.NewError(domain.CodeVesselNotFound, "vessel was not found")
@@ -130,11 +181,7 @@ func (s *Service) RetireVessel(id string, input VersionInput) (domain.Vessel, er
 			return err
 		}
 		snapshot.Vessels[id] = vessel
-		updated = vessel
+		*updated = vessel
 		return nil
-	})
-	if err != nil {
-		return domain.Vessel{}, err
 	}
-	return updated, nil
 }

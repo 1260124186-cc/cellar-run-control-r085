@@ -1,6 +1,7 @@
 package workflowcheck
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,6 +34,28 @@ type runView struct {
 type pairView struct {
 	Run    runView    `json:"run"`
 	Vessel vesselView `json:"vessel"`
+}
+
+type healthView struct {
+	Status   string `json:"status"`
+	Revision int64  `json:"revision"`
+}
+
+type preflightView struct {
+	Preflight preflightMeta   `json:"preflight"`
+	Result    json.RawMessage `json:"result"`
+}
+
+type preflightMeta struct {
+	CurrentVersion   int64              `json:"current_version"`
+	SnapshotRevision int64              `json:"snapshot_revision"`
+	WouldApply       bool               `json:"would_apply"`
+	Conflict         *preflightConflict `json:"conflict"`
+}
+
+type preflightConflict struct {
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
 }
 
 func createFormulaPayload(name string) map[string]any {

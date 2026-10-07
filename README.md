@@ -107,6 +107,44 @@ shape:
 }
 ```
 
+## Change Preflight
+
+Every write route above accepts an optional `preflight=true` query parameter
+that rehearses the write without committing it. The preflight runs the same
+validation and conflict rules as the committed write against a disposable
+snapshot clone, so it never creates entities, advances versions, or writes
+`state.json`. The response is always `200 OK` and reports what the committed
+write would do right now:
+
+```json
+{
+  "preflight": {
+    "current_version": 2,
+    "snapshot_revision": 9,
+    "would_apply": false,
+    "conflict": {
+      "code": "revision_conflict",
+      "detail": "the aggregate version does not match X-Expected-Version"
+    }
+  }
+}
+```
+
+- `current_version` is the target aggregate version at preflight time (`0`
+  when the target does not exist yet, such as for create requests).
+- `snapshot_revision` is the snapshot revision at preflight time.
+- `would_apply` tells whether the same write with the same
+  `X-Expected-Version` would succeed if submitted immediately.
+- `conflict` is the error the committed write would return; it is omitted
+  when `would_apply` is true.
+- `result` carries the would-be aggregate (or `run`/`vessel` pair) exactly as
+  the committed write would return it; it is omitted when `would_apply` is
+  false.
+
+A preflight is advisory and stores nothing. If another write lands between
+the preflight and the real commit, the committed write decides the outcome
+under the existing `X-Expected-Version` conflict rules.
+
 ## Workflow Checks
 
 Run each production workflow check separately:
@@ -115,6 +153,7 @@ Run each production workflow check separately:
 go run ./cmd/fermentctl check formula-approval
 go run ./cmd/fermentctl check vessel-run-lifecycle
 go run ./cmd/fermentctl check observations-completion
+go run ./cmd/fermentctl check preflight
 ```
 
 Each check creates a temporary snapshot directory, starts the real HTTP

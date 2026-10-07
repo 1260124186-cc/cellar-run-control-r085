@@ -147,6 +147,17 @@ func (s *Store) View(visitor func(domain.Snapshot) error) error {
 	return visitor(copied)
 }
 
+// Preview runs the mutator against a disposable clone of the current
+// snapshot so callers can rehearse a write. The mutation is never
+// persisted: the clone is discarded, the revision does not advance, and
+// no snapshot file is written.
+func (s *Store) Preview(mutator func(*domain.Snapshot) error) error {
+	s.mu.RLock()
+	candidate := s.snapshot.Clone()
+	s.mu.RUnlock()
+	return mutator(&candidate)
+}
+
 func (s *Store) Update(expected *int64, mutate func(*domain.Snapshot) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

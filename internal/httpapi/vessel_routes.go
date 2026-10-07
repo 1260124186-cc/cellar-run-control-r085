@@ -17,10 +17,20 @@ func registerVesselRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		vessel, err := app.CreateVessel(service.CreateVesselInput{
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.CreateVesselInput{
 			Code:      body.Code,
 			CapacityL: body.CapacityL,
-		})
+		}
+		if preflight {
+			report, created := app.PreflightCreateVessel(input)
+			writePreflight(response, report, created)
+			return
+		}
+		vessel, err := app.CreateVessel(input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -51,8 +61,17 @@ func registerVesselRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		vessel, err := app.FinishCleaning(request.PathValue("id"),
-			service.FinishCleaningInput{ExpectedVersion: expected})
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.FinishCleaningInput{ExpectedVersion: expected}
+		if preflight {
+			report, updated := app.PreflightFinishCleaning(request.PathValue("id"), input)
+			writePreflight(response, report, updated)
+			return
+		}
+		vessel, err := app.FinishCleaning(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -65,8 +84,17 @@ func registerVesselRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		vessel, err := app.RetireVessel(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preflight {
+			report, updated := app.PreflightRetireVessel(request.PathValue("id"), input)
+			writePreflight(response, report, updated)
+			return
+		}
+		vessel, err := app.RetireVessel(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return

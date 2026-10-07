@@ -53,3 +53,23 @@ type ObservationInput struct {
 type FinishCleaningInput struct {
 	ExpectedVersion *int64
 }
+
+// PreflightReport describes a read-only rehearsal of a write. It tells the
+// operator what the committed write would do right now without creating
+// entities, advancing versions, or writing the snapshot. A concurrent
+// change between the preflight and the real commit is settled by the
+// committed write under the existing conflict rules; the report itself is
+// never persisted.
+type PreflightReport struct {
+	// CurrentVersion is the version of the target aggregate when the
+	// preflight ran. It is zero when the target does not exist yet.
+	CurrentVersion int64
+	// Revision is the snapshot revision when the preflight ran.
+	Revision int64
+	// WouldApply reports whether the same write would succeed if it were
+	// submitted immediately with the same input and expected version.
+	WouldApply bool
+	// Conflict is the error the committed write would return right now.
+	// It is nil when WouldApply is true.
+	Conflict *domain.Error
+}

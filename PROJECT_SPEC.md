@@ -189,6 +189,15 @@ updated aggregate and its version. A failed write returns:
 Write requests may include `X-Expected-Version`. When present, the service
 rejects a stale write instead of overwriting newer state.
 
+Every write route also accepts `preflight=true` as a query parameter. A
+preflight rehearses the write against a disposable snapshot clone and
+returns the current aggregate version, the snapshot revision, whether the
+write would apply, the conflict the committed write would return, and the
+would-be result when it applies. A preflight never creates entities,
+advances versions, or writes the snapshot, and its report is not persisted.
+A concurrent change between a preflight and the real commit is settled by
+the committed write under the existing conflict rules.
+
 `GET /healthz` returns process health and the current snapshot revision.
 
 ## Persistence And Concurrency
@@ -210,13 +219,14 @@ task owns systematic tests for validation boundaries, state transitions,
 numeric calculations, stale revisions, storage failures, and concurrent
 reservation attempts.
 
-The current build command is `go build ./...`. Three bounded production checks
+The current build command is `go build ./...`. Four bounded production checks
 start the real HTTP handler, issue real JSON requests, check success and failure
 behavior, and exit without external services:
 
 - `go run ./cmd/fermentctl check formula-approval`
 - `go run ./cmd/fermentctl check vessel-run-lifecycle`
 - `go run ./cmd/fermentctl check observations-completion`
+- `go run ./cmd/fermentctl check preflight`
 
 ## Scope Limits
 

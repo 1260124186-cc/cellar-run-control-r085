@@ -32,12 +32,22 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, err := app.CreateRun(service.CreateRunInput{
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.CreateRunInput{
 			Code:           body.Code,
 			FormulaID:      body.FormulaID,
 			PlannedVolumeL: body.PlannedVolumeL,
 			Notes:          body.Notes,
-		})
+		}
+		if preflight {
+			report, created := app.PreflightCreateRun(input)
+			writePreflight(response, report, created)
+			return
+		}
+		run, err := app.CreateRun(input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -72,10 +82,20 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, vessel, err := app.ReserveRun(request.PathValue("id"), service.ReserveRunInput{
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.ReserveRunInput{
 			ExpectedVersion: expected,
 			VesselID:        body.VesselID,
-		})
+		}
+		if preflight {
+			report, run, vessel := app.PreflightReserveRun(request.PathValue("id"), input)
+			writePreflight(response, report, map[string]any{"run": run, "vessel": vessel})
+			return
+		}
+		run, vessel, err := app.ReserveRun(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -88,8 +108,17 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, vessel, err := app.StartRun(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preflight {
+			report, run, vessel := app.PreflightStartRun(request.PathValue("id"), input)
+			writePreflight(response, report, map[string]any{"run": run, "vessel": vessel})
+			return
+		}
+		run, vessel, err := app.StartRun(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -102,13 +131,23 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, err := app.AppendObservation(request.PathValue("id"), service.ObservationInput{
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.ObservationInput{
 			Sequence:     body.Sequence,
 			Gravity:      body.Gravity,
 			TemperatureC: body.TemperatureC,
 			ObservedAt:   body.ObservedAt,
 			Note:         body.Note,
-		})
+		}
+		if preflight {
+			report, updated := app.PreflightAppendObservation(request.PathValue("id"), input)
+			writePreflight(response, report, updated)
+			return
+		}
+		run, err := app.AppendObservation(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -121,8 +160,17 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, err := app.BeginConditioning(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preflight {
+			report, updated := app.PreflightBeginConditioning(request.PathValue("id"), input)
+			writePreflight(response, report, updated)
+			return
+		}
+		run, err := app.BeginConditioning(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -135,8 +183,17 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, vessel, err := app.CompleteRun(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preflight {
+			report, run, vessel := app.PreflightCompleteRun(request.PathValue("id"), input)
+			writePreflight(response, report, map[string]any{"run": run, "vessel": vessel})
+			return
+		}
+		run, vessel, err := app.CompleteRun(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -149,8 +206,17 @@ func registerRunRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		run, vessel, err := app.AbortRun(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preflight, err := preflightRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preflight {
+			report, run, vessel := app.PreflightAbortRun(request.PathValue("id"), input)
+			writePreflight(response, report, map[string]any{"run": run, "vessel": vessel})
+			return
+		}
+		run, vessel, err := app.AbortRun(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
