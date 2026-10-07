@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/1260124186-cc/solo-0016-cellar-run-control/internal/domain"
 )
@@ -107,6 +108,23 @@ func expectedVersion(request *http.Request) (*int64, error) {
 			"X-Expected-Version", "must be a positive integer")
 	}
 	return &parsed, nil
+}
+
+// previewRequested reports whether the write should be evaluated read-only.
+// Only "true" and "1" opt in; any other non-empty value is a client error so
+// that a typo cannot be mistaken for an actual commit.
+func previewRequested(request *http.Request) (bool, error) {
+	value := strings.TrimSpace(request.Header.Get("X-Preview"))
+	if value == "" {
+		return false, nil
+	}
+	switch strings.ToLower(value) {
+	case "true", "1":
+		return true, nil
+	default:
+		return false, domain.FieldError(domain.CodeInvalidInput,
+			"X-Preview", `must be "true" or omitted`)
+	}
 }
 
 func handleDecode(response http.ResponseWriter, err error) bool {

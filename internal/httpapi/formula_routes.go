@@ -27,7 +27,7 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		formula, err := app.CreateFormula(service.CreateFormulaInput{
+		input := service.CreateFormulaInput{
 			Name:                  body.Name,
 			Style:                 body.Style,
 			TargetOriginalGravity: body.TargetOriginalGravity,
@@ -35,7 +35,16 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 			MaxFermentationTempC:  body.MaxFermentationTempC,
 			MinimumDays:           body.MinimumDays,
 			MaximumDays:           body.MaximumDays,
-		})
+		}
+		preview, err := previewRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		if preview {
+			writePreview(response, app.PreviewCreateFormula(input))
+			return
+		}
+		formula, err := app.CreateFormula(input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -70,8 +79,16 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		formula, err := app.SetFormulaSteps(request.PathValue("id"),
-			service.SetFormulaStepsInput{ExpectedVersion: expected, Steps: body.Steps})
+		preview, err := previewRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.SetFormulaStepsInput{ExpectedVersion: expected, Steps: body.Steps}
+		if preview {
+			writePreview(response, app.PreviewSetFormulaSteps(request.PathValue("id"), input))
+			return
+		}
+		formula, err := app.SetFormulaSteps(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -84,8 +101,16 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		formula, err := app.ApproveFormula(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preview, err := previewRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preview {
+			writePreview(response, app.PreviewApproveFormula(request.PathValue("id"), input))
+			return
+		}
+		formula, err := app.ApproveFormula(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return
@@ -98,8 +123,16 @@ func registerFormulaRoutes(mux *http.ServeMux, app *service.Service) {
 		if !handleDecode(response, err) {
 			return
 		}
-		formula, err := app.RetireFormula(request.PathValue("id"),
-			service.VersionInput{ExpectedVersion: expected})
+		preview, err := previewRequested(request)
+		if !handleDecode(response, err) {
+			return
+		}
+		input := service.VersionInput{ExpectedVersion: expected}
+		if preview {
+			writePreview(response, app.PreviewRetireFormula(request.PathValue("id"), input))
+			return
+		}
+		formula, err := app.RetireFormula(request.PathValue("id"), input)
 		if err != nil {
 			writeDomainError(response, err)
 			return

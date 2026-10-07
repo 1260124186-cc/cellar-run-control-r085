@@ -24,7 +24,7 @@ func (s *Service) Revision() int64 {
 	return s.store.Revision()
 }
 
-func (s *Service) checkExpected(current int64, expected *int64) error {
+func checkExpected(current int64, expected *int64) error {
 	if expected != nil && current != *expected {
 		return domain.NewError(domain.CodeRevisionConflict,
 			"the aggregate version does not match X-Expected-Version")

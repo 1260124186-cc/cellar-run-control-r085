@@ -107,6 +107,49 @@ shape:
 }
 ```
 
+## Change Preflight
+
+Every write entry point also answers a read-only preflight when the request
+carries `X-Preview: true`. The route, method, JSON body, and
+`X-Expected-Version` header are identical to a real write; only the outcome
+changes. A preflight never creates an entity, assigns an identifier or
+generated run code, advances an aggregate version, bumps the snapshot
+revision, or writes `state.json`. It evaluates the proposal against a detached
+copy of the current snapshot and returns `200 OK` with:
+
+```json
+{
+  "snapshot_revision": 12,
+  "current_version": 3,
+  "expected_version": 3,
+  "conflict": null,
+  "change": {
+    "formula": { "id": "formula_...", "state": "approved", "version": 4 }
+  },
+  "assignment": null
+}
+```
+
+- `snapshot_revision` is the revision the operator is looking at.
+- `current_version` is the aggregate version that exists now (`null` for a
+  not-yet-created aggregate).
+- `expected_version` echoes `X-Expected-Version` when supplied.
+- `conflict` is `null` when the commit would be accepted; otherwise it carries
+  the same stable code, detail, and field that the real write would return.
+- `change` projects the state after the proposed revision using the same
+  aggregate shapes as a normal write (`formula`, `vessel`, `run`, or
+  `run` + `vessel`). It is `null` when a conflict is reported.
+- `assignment` appears only on create operations: `id_assigned` says the
+  identifier is server-assigned at commit time (the projection carries `null`
+  for `id`), `initial_version` is always `1`, and `code_assigned` marks a run
+  whose code would be generated at commit time.
+
+Preflight is advisory. A concurrent modification between preflight and commit
+is resolved by the real write under the existing `X-Expected-Version` and
+domain conflict rules; a preflight response is never a persisted fact and never
+holds a reservation or lock. A malformed `X-Preview` value is rejected with
+`400 invalid_input`.
+
 ## Workflow Checks
 
 Run each production workflow check separately:
@@ -115,11 +158,14 @@ Run each production workflow check separately:
 go run ./cmd/fermentctl check formula-approval
 go run ./cmd/fermentctl check vessel-run-lifecycle
 go run ./cmd/fermentctl check observations-completion
+go run ./cmd/fermentctl check change-previews
 ```
 
 Each check creates a temporary snapshot directory, starts the real HTTP
 handler on a loopback listener, issues JSON requests, verifies success and
-failure behavior, and removes its temporary data.
+failure behavior, and removes its temporary data. The `change-previews` check
+additionally verifies that preflight responses match real commit outcomes
+while leaving every aggregate, version, and the snapshot file untouched.
 
 ## Persistence And Recovery
 

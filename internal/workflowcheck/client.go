@@ -35,6 +35,25 @@ func (c *client) call(
 	payload any,
 	expectedVersion *int64,
 ) (response, error) {
+	return c.callWith(method, path, payload, expectedVersion, false)
+}
+
+func (c *client) callPreview(
+	method string,
+	path string,
+	payload any,
+	expectedVersion *int64,
+) (response, error) {
+	return c.callWith(method, path, payload, expectedVersion, true)
+}
+
+func (c *client) callWith(
+	method string,
+	path string,
+	payload any,
+	expectedVersion *int64,
+	preview bool,
+) (response, error) {
 	var body io.Reader
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
@@ -53,6 +72,41 @@ func (c *client) call(
 	if expectedVersion != nil {
 		request.Header.Set("X-Expected-Version", fmt.Sprintf("%d", *expectedVersion))
 	}
+	if preview {
+		request.Header.Set("X-Preview", "true")
+	}
+	raw, err := c.http.Do(request)
+	if err != nil {
+		return response{}, fmt.Errorf("perform request: %w", err)
+	}
+	defer raw.Body.Close()
+	content, err := io.ReadAll(io.LimitReader(raw.Body, 2<<20))
+	if err != nil {
+		return response{}, fmt.Errorf("read response: %w", err)
+	}
+	return response{status: raw.StatusCode, body: content}, nil
+}
+
+// callHeader issues a request with a raw X-Preview header value so that
+// malformed opt-in handling can be exercised.
+func (c *client) callHeader(
+	method, path, previewValue string,
+	payload any,
+) (response, error) {
+	var body io.Reader
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return response{}, fmt.Errorf("encode request: %w", err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+	request, err := http.NewRequest(method, c.baseURL+path, body)
+	if err != nil {
+		return response{}, fmt.Errorf("create request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Preview", previewValue)
 	raw, err := c.http.Do(request)
 	if err != nil {
 		return response{}, fmt.Errorf("perform request: %w", err)

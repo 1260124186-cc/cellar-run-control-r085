@@ -189,6 +189,35 @@ updated aggregate and its version. A failed write returns:
 Write requests may include `X-Expected-Version`. When present, the service
 rejects a stale write instead of overwriting newer state.
 
+### Change Preflight
+
+Every write entry point accepts the same request as a read-only preflight when
+it carries `X-Preview: true`. The preflight returns `200 OK` with:
+
+- `snapshot_revision`: the revision observed while evaluating the request;
+- `current_version`: the target aggregate's current version, or `null` when
+  the aggregate does not exist yet;
+- `expected_version`: the supplied `X-Expected-Version`, echoed back;
+- `conflict`: `null`, or the stable code, detail, and field that the real
+  commit would return under the existing conflict rules;
+- `change`: the projected state after the revision, or `null` on conflict;
+- `assignment`: for create operations, a marker that the identifier (and, for
+  runs, possibly the run code) is assigned server-side at commit time, with
+  `initial_version` 1.
+
+The preflight evaluates the proposal against a detached copy of the snapshot
+under a read view. It must not generate an entity identifier, create or mutate
+an entity, advance an aggregate version or snapshot revision, or write the
+snapshot file. Projected aggregates that do not exist yet carry `null` for
+`id` and `version`; a server-generated run code is projected as `null` with
+`code_assigned: true`.
+
+The preflight is advisory and never acquires a reservation. When a concurrent
+modification happens between preflight and commit, the real write decides the
+outcome under the existing version and domain conflict rules; the preflight
+result never becomes a persisted fact. A malformed `X-Preview` value is a
+`400 invalid_input` error.
+
 `GET /healthz` returns process health and the current snapshot revision.
 
 ## Persistence And Concurrency
@@ -210,13 +239,14 @@ task owns systematic tests for validation boundaries, state transitions,
 numeric calculations, stale revisions, storage failures, and concurrent
 reservation attempts.
 
-The current build command is `go build ./...`. Three bounded production checks
+The current build command is `go build ./...`. Four bounded production checks
 start the real HTTP handler, issue real JSON requests, check success and failure
 behavior, and exit without external services:
 
 - `go run ./cmd/fermentctl check formula-approval`
 - `go run ./cmd/fermentctl check vessel-run-lifecycle`
 - `go run ./cmd/fermentctl check observations-completion`
+- `go run ./cmd/fermentctl check change-previews`
 
 ## Scope Limits
 
